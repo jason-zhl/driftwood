@@ -1,0 +1,1 @@
+Raft-based replicated key-value store (Go, Rust, or C++). Include leader election, log replication, snapshots, and membership changes, and test it with a fault-injection harness (network partitions, crashes, delayed messages) plus a linearizability checker like Porcupine. 
