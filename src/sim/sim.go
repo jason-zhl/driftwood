@@ -52,12 +52,17 @@ func (q *eventQueue) Pop() any {
 	return e
 }
 
+// TraceFunc is called after each Step with the event that was processed
+// and any messages the node emitted.
+type TraceFunc func(time int, kind EventType, node int, msg raft.Message, emitted []raft.Message)
+
 type Sim struct {
 	now   int        // virtual clock, in ticks
 	queue eventQueue // min-heap ordered by (time, seq)
 	seq   int        // breaks ties so same-time events always pop in the same order
 	rng   *rand.Rand // the only random source the network uses
 	nodes map[int]Node
+	Trace TraceFunc
 
 	// fault state
 	connected map[int]bool
@@ -120,6 +125,8 @@ func (s *Sim) send(msg raft.Message) {
 	})
 }
 
+func (s *Sim) Now() int { return s.now }
+
 func (s *Sim) Step() bool {
 	if s.queue.Len() == 0 {
 		return false
@@ -129,14 +136,19 @@ func (s *Sim) Step() bool {
 	s.now = curr.time
 
 	var msgs []raft.Message
+	node := curr.node
 	switch curr.kind {
 	case EventTick:
 		msgs = s.nodes[curr.node].Tick()
 		s.schedule(&Event{time: s.now + 1, kind: EventTick, node: curr.node})
 	case EventDeliver:
+		node = curr.msg.To
 		if s.canReach(curr.msg.From, curr.msg.To) {
 			msgs = s.nodes[curr.msg.To].Step(curr.msg)
 		}
+	}
+	if s.Trace != nil {
+		s.Trace(s.now, curr.kind, node, curr.msg, msgs)
 	}
 	for _, msg := range msgs {
 		s.send(msg)
